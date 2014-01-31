@@ -60,6 +60,17 @@ describe Ridley::DataBagItemObject do
       subject.attributes[:password].should == "password123"
     end
 
+    it "decrypts an encrypted v2 value" do
+      subject.attributes[:password] = Hashie::Mash.new
+      subject.attributes[:password][:version] = 2
+      subject.attributes[:password][:cipher] = "aes-256-cbc"
+      subject.attributes[:password][:encrypted_data] = "UJXKqAIhc/7/j4BvMT2Yp87JFCNeiGgc4Xan+ziVFGQ="
+      subject.attributes[:password][:iv] = "4uDc0GxRoou0MrloJ0gMdA=="
+      subject.attributes[:password][:hmac] = "weqkSWdxHhd/go9S+l39ACvFW2USoqr1r8aUXWDctNY="
+      subject.decrypt
+      subject.attributes[:password].should == "password123"
+    end
+
     it "does not decrypt the id field" do
       id = "dbi_id"
       subject.attributes[:id] = id
