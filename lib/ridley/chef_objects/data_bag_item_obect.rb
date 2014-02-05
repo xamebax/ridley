@@ -64,8 +64,8 @@ module Ridley
         decrypt_v0_value(value)
       when 1
         decrypt_v1_value(value)
-      else
-        raise NotImplementedError, "Currently decrypting only version 0 & 1 databags are supported"
+      when 2
+        decrypt_v2_value(value)
       end
     end
 
@@ -113,9 +113,7 @@ module Ridley
       end
 
       def decrypt_v0_value(value)
-        if encrypted_data_bag_secret.nil?
-          raise Errors::EncryptedDataBagSecretNotSet
-        end
+        is_secret_present?
 
         decoded_value = Base64.decode64(value)
 
@@ -128,9 +126,7 @@ module Ridley
       end
 
       def decrypt_v1_value(attrs)
-        if encrypted_data_bag_secret.nil?
-          raise Errors::EncryptedDataBagSecretNotSet
-        end
+        is_secret_present?
 
         cipher = OpenSSL::Cipher::Cipher.new(attrs[:cipher])
         cipher.decrypt
@@ -139,6 +135,42 @@ module Ridley
         decrypted_value = cipher.update(Base64.decode64(attrs[:encrypted_data])) + cipher.final
 
         YAML.load(decrypted_value)["json_wrapper"]
+      end
+
+      def decrypt_v2_value(attrs)
+        is_secret_present?
+
+        digest = OpenSSL::Digest.new("sha256")
+
+        cipher = OpenSSL::Cipher::Cipher.new(attrs[:cipher])
+        cipher.decrypt
+        cipher.key = Digest::SHA256.digest(encrypted_data_bag_secret)
+        cipher.iv = Base64.decode64(attrs[:iv])
+
+        hmac = OpenSSL::HMAC.digest(digest, encrypted_data_bag_secret, attrs[:encrypted_data])
+
+        if candidate_hmac_matches?(hmac, attrs)
+          decrypted_value = cipher.update(Base64.decode64(attrs[:encrypted_data])) + cipher.final
+
+          YAML.load(decrypted_value)["json_wrapper"]
+        else
+          raise Errors::InvalidHMAC
+        end
+      end
+
+      def candidate_hmac_matches?(expected_hmac, attrs)
+        return false unless attrs[:hmac]
+        expected_bytes = expected_hmac.bytes.to_a
+        candidate_hmac_bytes = Base64.decode64(attrs[:hmac]).bytes.to_a
+        valid = expected_bytes.size ^ candidate_hmac_bytes.size
+        expected_bytes.zip(candidate_hmac_bytes) { |x, y| valid |= x ^ y.to_i }
+        valid == 0
+      end
+
+      def is_secret_present?
+        if encrypted_data_bag_secret.nil?
+          raise Errors::EncryptedDataBagSecretNotSet
+        end
       end
 
       def encrypted_data_bag_secret

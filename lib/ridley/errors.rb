@@ -43,6 +43,12 @@ module Ridley
       end
     end
 
+    class InvalidHMAC < RidleyError
+      def message
+        "error decrypting data bag item value: invalid hmac."
+      end
+    end
+
     class BootstrapError < RidleyError; end
     class ClientKeyFileNotFoundOrInvalid < BootstrapError; end
     class EncryptedDataBagSecretNotFound < BootstrapError; end
